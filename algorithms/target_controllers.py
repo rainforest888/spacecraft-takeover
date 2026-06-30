@@ -105,3 +105,20 @@ def make_target_strategies() -> list:
         if len(strategies) < 10:
             strategies.append(TargetLQRController(Q_diag=Qd, R_diag=Rd, max_torque=10.0))
     return strategies[:10]
+
+
+def make_target_strategies_strong() -> list:
+    """Create 10 STRONG target strategies with aggressive PID gains."""
+    strategies = []
+    strategies.append(PIDController(kp=10.0, ki=0.5, kd=5.0, max_torque=12.0))
+    strategies.append(PIDController(kp=20.0, ki=1.0, kd=10.0, max_torque=12.0))
+    strategies.append(PIDController(kp=30.0, ki=1.5, kd=15.0, max_torque=12.0))
+    strategies.append(SMCController(lambda_=2.0, eta=8.0, max_torque=12.0))
+    strategies.append(SMCController(lambda_=3.0, eta=8.0, max_torque=12.0))
+    strategies.append(SMCController(lambda_=4.0, eta=8.0, max_torque=12.0))
+    for Qd, Rd in [((30,30,30,5,5,5), (0.5,0.5,0.5)),
+                   ((50,50,50,10,10,10), (1.0,1.0,1.0)),
+                   ((20,20,20,3,3,3), (0.2,0.2,0.2)),
+                   ((100,100,100,20,20,20), (2.0,2.0,2.0))]:
+        strategies.append(TargetLQRController(Q_diag=Qd, R_diag=Rd, max_torque=12.0))
+    return strategies[:10]
