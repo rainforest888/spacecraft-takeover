@@ -81,3 +81,44 @@ def test_combined_inertia_parallel_axis():
     assert I.shape == (3, 3)
     # parallel axis: displacement along x, so Ixx unchanged; Iyy, Izz increase
     assert I[0, 0] >= I1[0, 0] + I2[0, 0]
+
+
+from algorithms.target_controllers import PIDController, SMCController, TargetLQRController
+
+
+def test_pid_controller_output_shape():
+    pid = PIDController(kp=2.0, ki=0.1, kd=1.0, max_torque=10.0)
+    attitude_error = np.array([0.1, -0.2, 0.05])
+    angular_vel = np.array([0.01, -0.02, 0.0])
+    tau = pid.compute(attitude_error, angular_vel, dt=0.016)
+    assert tau.shape == (3,)
+    assert np.all(np.abs(tau) <= 10.0 + 1e-6)
+
+
+def test_pid_integral_accumulates():
+    pid = PIDController(kp=1.0, ki=1.0, kd=0.0, max_torque=100.0)
+    error = np.array([1.0, 0.0, 0.0])
+    t1 = pid.compute(error, np.zeros(3), dt=0.1)
+    t2 = pid.compute(error, np.zeros(3), dt=0.1)
+    assert not np.allclose(t1, t2)
+    pid.reset()
+
+
+def test_smc_controller_output():
+    smc = SMCController(lambda_=1.0, eta=2.0, max_torque=10.0)
+    error = np.array([0.5, -0.3, 0.1])
+    omega = np.array([0.1, 0.0, -0.05])
+    tau = smc.compute(error, omega, dt=0.016)
+    assert tau.shape == (3,)
+    assert np.all(np.abs(tau) <= 10.0 + 1e-6)
+
+
+def test_target_lqr_controller_output():
+    lqr = TargetLQRController(Q_diag=(30, 30, 30, 5, 5, 5),
+                               R_diag=(0.5, 0.5, 0.5),
+                               max_torque=15.0)
+    error = np.array([0.2, -0.1, 0.05])
+    omega = np.array([0.05, -0.03, 0.01])
+    tau = lqr.compute(error, omega, dt=0.016)
+    assert tau.shape == (3,)
+    assert np.all(np.abs(tau) <= 15.0 + 1e-6)
