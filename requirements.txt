@@ -1,0 +1,15 @@
+# MuJoCo & Physics
+mujoco>=3.0
+scipy
+numpy
+
+# RL & DL
+gymnasium
+torch
+
+# Visualization
+matplotlib
+
+# Utilities
+pyyaml
+tqdm

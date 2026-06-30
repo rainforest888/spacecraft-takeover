@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+
+# Anaconda
+.env/
+conda-env/
+
+# Model weights
+outputs/checkpoints/*.pt
+outputs/checkpoints/*.pth
+
+# Videos (large)
+outputs/videos/*.mp4
+outputs/videos/*.avi
+
+# Logs
+outputs/logs/*.tfevents*
+
+# SolidWorks
+models/solidworks/*~
+*.sldprt~*
+~$*.sldprt
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
