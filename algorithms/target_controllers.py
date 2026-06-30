@@ -85,15 +85,15 @@ class TargetLQRController:
 def make_target_strategies() -> list:
     """Create 10 distinct target strategies for adversarial training."""
     strategies = []
-    # PID: 3 variants
+    # PID: 3 variants (target weaker than agent: max_torque=12 vs agent 15)
     for kp in [2.0, 5.0, 8.0]:
         for ki in [0.1, 0.5]:
             if len(strategies) < 3:
-                strategies.append(PIDController(kp=kp, ki=ki, kd=kp*0.5, max_torque=20.0))
+                strategies.append(PIDController(kp=kp, ki=ki, kd=kp*0.5, max_torque=12.0))
     # SMC: 3 variants
     for lam in [1.0, 2.0, 3.0]:
         if len(strategies) < 6:
-            strategies.append(SMCController(lambda_=lam, eta=5.0, max_torque=20.0))
+            strategies.append(SMCController(lambda_=lam, eta=5.0, max_torque=12.0))
     # LQR: 4 variants
     lqr_configs = [
         ((30, 30, 30, 5, 5, 5), (0.5, 0.5, 0.5)),
@@ -103,5 +103,5 @@ def make_target_strategies() -> list:
     ]
     for Qd, Rd in lqr_configs:
         if len(strategies) < 10:
-            strategies.append(TargetLQRController(Q_diag=Qd, R_diag=Rd, max_torque=20.0))
+            strategies.append(TargetLQRController(Q_diag=Qd, R_diag=Rd, max_torque=12.0))
     return strategies[:10]

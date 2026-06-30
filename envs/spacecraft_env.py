@@ -18,20 +18,21 @@ MODEL_PATH = os.path.join(os.path.dirname(__file__), "..", "models", "mjcf", "co
 class SpacecraftTakeoverEnv(gym.Env):
     metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 60}
 
-    # Reward weights (from spec)
-    W1 = 10.0   # target fuel consumed
-    W2 = 5.0    # self fuel cost
-    W3 = 2.0    # attitude error
-    W4 = 1.0    # angular velocity
-    W5 = 3.0    # burst bonus
-    W6 = 2.0    # weakening bonus
+    # Reward weights
+    W1 = 20.0   # target fuel consumed — PRIMARY: must dominate
+    W2 = 2.0    # self fuel cost — light penalty, we want aggressive exploration
+    W3 = 1.0    # attitude error — soft penalty, don't discourage motion
+    W4 = 0.5    # angular velocity — very soft
+    W5 = 5.0    # burst bonus
+    W6 = 3.0    # weakening bonus
 
     R_SUCCESS = 100.0
     R_FAIL = -100.0
 
     MAX_ATTITUDE_ERROR = np.pi
-    MAX_TORQUE = 10.0
-    FUEL_K = 0.005
+    MAX_TORQUE = 15.0
+    FUEL_K_SELF = 0.010      # 我方燃料消耗系数
+    FUEL_K_TARGET = 0.040    # 目标燃料消耗系数 (更大质量 = 更快消耗)
     INITIAL_FUEL = 1.0
 
     CTL_DT = 1.0 / 60.0          # 60 Hz control
@@ -150,9 +151,9 @@ class SpacecraftTakeoverEnv(gym.Env):
             mujoco.mj_step1(self.model, self.data)
             mujoco.mj_step2(self.model, self.data)
 
-        # Fuel
-        self_fuel_used = fuel_consumed_this_step(tau_self, self.CTL_DT, self.FUEL_K)
-        target_fuel_used = fuel_consumed_this_step(tau_target, self.CTL_DT, self.FUEL_K)
+        # Fuel (target burns faster — larger mass, larger inertia)
+        self_fuel_used = fuel_consumed_this_step(tau_self, self.CTL_DT, self.FUEL_K_SELF)
+        target_fuel_used = fuel_consumed_this_step(tau_target, self.CTL_DT, self.FUEL_K_TARGET)
         self._self_fuel -= self_fuel_used
         self._target_fuel -= target_fuel_used
 
