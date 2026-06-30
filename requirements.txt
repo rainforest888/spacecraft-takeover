@@ -10,6 +10,10 @@ torch
 # Visualization
 matplotlib
 
+# Video export
+imageio
+imageio-ffmpeg
+
 # Utilities
 pyyaml
 tqdm
