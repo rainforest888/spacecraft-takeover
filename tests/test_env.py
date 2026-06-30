@@ -122,3 +122,65 @@ def test_target_lqr_controller_output():
     tau = lqr.compute(error, omega, dt=0.016)
     assert tau.shape == (3,)
     assert np.all(np.abs(tau) <= 15.0 + 1e-6)
+
+
+import sys
+sys.path.insert(0, 'G:/claude code_workspace/spacecraft-takeover')
+from envs.spacecraft_env import SpacecraftTakeoverEnv
+
+
+def test_env_reset_returns_valid_obs():
+    env = SpacecraftTakeoverEnv(render_mode=None)
+    obs, info = env.reset()
+    assert obs.shape == (env.observation_space.shape[0],)
+    assert -np.inf < obs[7] < np.inf  # τ_target_mag
+    assert 0.0 <= obs[6] <= 1.0       # f_self (index 6 in 11-dim obs)
+    env.close()
+
+
+def test_env_step_returns_correct_shapes():
+    env = SpacecraftTakeoverEnv(render_mode=None)
+    obs, _ = env.reset()
+    action = env.action_space.sample()
+    next_obs, reward, terminated, truncated, info = env.step(action)
+    assert next_obs.shape == obs.shape
+    assert isinstance(reward, float)
+    assert isinstance(terminated, bool)
+    assert isinstance(truncated, bool)
+    assert info['self_fuel'] >= 0.0
+    env.close()
+
+
+def test_env_episode_terminates_on_truncation():
+    env = SpacecraftTakeoverEnv(render_mode=None, max_steps=50)
+    obs, _ = env.reset()
+    step_count = 0
+    done = False
+    while not done:
+        action = env.action_space.sample()
+        obs, reward, terminated, truncated, info = env.step(action)
+        step_count += 1
+        done = terminated or truncated
+    assert step_count <= 50
+    env.close()
+
+
+def test_env_observation_bounds():
+    env = SpacecraftTakeoverEnv(render_mode=None)
+    for _ in range(3):
+        obs, _ = env.reset()
+        # f_self check
+        assert 0.0 <= obs[6] <= 1.0
+        # t_elapsed check
+        assert 0.0 <= obs[10] <= 1.0
+        for __ in range(10):
+            action = env.action_space.sample()
+            obs, _, _, _, _ = env.step(action)
+    env.close()
+
+
+def test_env_exposes_physics_state():
+    env = SpacecraftTakeoverEnv(render_mode=None)
+    obs, _ = env.reset()
+    assert env.data is not None
+    env.close()
