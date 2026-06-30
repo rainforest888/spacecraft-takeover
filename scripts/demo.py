@@ -1,13 +1,9 @@
 # scripts/demo.py
-"""Render and record takeover demonstration video."""
-import os
-import sys
-import argparse
+"""Render and record takeover demonstration video at 1080p60."""
+import os, sys, argparse, time
 import numpy as np
 import mujoco
-
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-
 from envs.spacecraft_env import SpacecraftTakeoverEnv
 from algorithms.td3_agent import TD3Agent
 from algorithms.lqr_controller import LQRController
@@ -24,14 +20,19 @@ def demo(args):
     lqr = LQRController(I_body, max_torque=env.MAX_TORQUE)
 
     renderer = mujoco.Renderer(env.model, args.width, args.height)
+
     os.makedirs(args.output_dir, exist_ok=True)
     video_path = os.path.join(args.output_dir, "demo.mp4")
 
     frames = []
     obs, info = env.reset()
     switch = SwitchManager()
+    np.random.seed(args.seed)
 
-    print(f"Recording demo -- target strategy: {info['target_strategy']}")
+    print(f"Recording demo — target: {info['target_strategy']}")
+    print(f"  Resolution: {args.width}×{args.height} @ {args.fps} fps")
+    t0 = time.time()
+
     for step in range(args.max_steps):
         switch.update(
             tau_target_mag=obs[7],
@@ -44,48 +45,54 @@ def demo(args):
         else:
             tau_td3 = agent.select_action(obs, noise_std=0.0) * env.MAX_TORQUE
             tau_lqr = lqr.compute(obs[0:3], obs[3:6])
-            alpha = switch.get_blend_alpha()
-            tau = alpha * tau_td3 + (1.0 - alpha) * tau_lqr
+            alpha  = switch.get_blend_alpha()
+            tau    = alpha * tau_td3 + (1.0 - alpha) * tau_lqr
             action = np.clip(tau / env.MAX_TORQUE, -1.0, 1.0)
 
         obs, _, terminated, truncated, info = env.step(action)
 
         renderer.update_scene(env.data)
-        pixels = renderer.render()
-        frames.append(pixels)
+        frames.append(renderer.render())
 
-        if step % 60 == 0:
-            print(f"  Step {step}: phase={switch.phase} "
-                  f"self_fuel={obs[6]:.3f} "
-                  f"att_err={np.linalg.norm(obs[0:3]):.3f}")
+        if step % 60 == 0 or terminated or truncated:
+            elapsed = time.time() - t0
+            print(f"  Step {step:4d}: phase={switch.phase:10s}  "
+                  f"self_fuel={obs[6]:.3f}  "
+                  f"att_err={np.linalg.norm(obs[0:3]):.3f}  "
+                  f"elapsed={elapsed:.1f}s")
 
         if terminated or truncated:
-            print(f"  Final: step={step} success={info['target_fuel'] <= 0}")
+            success = "SUCCESS" if info.get("target_fuel", 1.0) <= 0.0 else "TIMEOUT"
+            print(f"\n  >>> Episode ended: step={step}  result={success}  phase={switch.phase}")
+            for _ in range(args.fps * 2):
+                frames.append(frames[-1])
             break
+
+    renderer.close()
+    env.close()
 
     try:
         import imageio
-        imageio.mimsave(video_path, frames, fps=args.fps)
-        print(f"Video saved to {video_path}")
+        imageio.mimsave(video_path, frames, fps=args.fps, quality=8)
+        print(f"\nVideo saved → {video_path}  ({len(frames)} frames, {len(frames)/args.fps:.1f}s)")
     except ImportError:
+        import imageio
         frame_dir = os.path.join(args.output_dir, "frames")
         os.makedirs(frame_dir, exist_ok=True)
-        import imageio
         for i, frame in enumerate(frames):
             imageio.imwrite(os.path.join(frame_dir, f"frame_{i:04d}.png"), frame)
-        print(f"Frames saved to {frame_dir}/")
-
-    env.close()
+        print(f"\nFrames saved → {frame_dir}/  ({len(frames)} frames)")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--checkpoint", type=str, required=True)
-    parser.add_argument("--max-steps", type=int, default=500)
-    parser.add_argument("--hidden-dim", type=int, default=256)
-    parser.add_argument("--width", type=int, default=1280)
-    parser.add_argument("--height", type=int, default=720)
-    parser.add_argument("--fps", type=int, default=60)
-    parser.add_argument("--output-dir", type=str, default="outputs/videos")
+    parser.add_argument("--max-steps",   type=int, default=500)
+    parser.add_argument("--hidden-dim",  type=int, default=256)
+    parser.add_argument("--width",       type=int, default=1920)
+    parser.add_argument("--height",      type=int, default=1080)
+    parser.add_argument("--fps",         type=int, default=60)
+    parser.add_argument("--output-dir",  type=str, default="outputs/videos")
+    parser.add_argument("--seed",        type=int, default=42)
     args = parser.parse_args()
     demo(args)

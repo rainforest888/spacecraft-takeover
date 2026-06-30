@@ -4,7 +4,7 @@
   <option timestep="0.002" gravity="0 0 0"/>
 
   <visual>
-    <global offwidth="1920" offheight="1080"/>
+    <global offwidth="1920" offheight="1920"/>
   </visual>
 
   <default>

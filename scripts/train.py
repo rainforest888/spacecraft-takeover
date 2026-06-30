@@ -60,8 +60,9 @@ def train(args):
         avg_q = float(np.mean(episode_q_values)) if episode_q_values else 0.0
         success = info.get("target_fuel", 1.0) <= 0.0
         log_file.write(f"{episode},{episode_reward:.4f},{step + 1},{int(success)},{avg_q:.6f}\n")
+        log_file.flush()
 
-        if (episode + 1) % 50 == 0:
+        if (episode + 1) % 10 == 0:
             print(f"Ep {episode + 1:5d}/{args.episodes}  |  "
                   f"reward: {episode_reward:8.2f}  |  steps: {step + 1:3d}  |  "
                   f"success: {success}  |  best: {best_reward:8.2f}")
