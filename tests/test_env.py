@@ -184,3 +184,34 @@ def test_env_exposes_physics_state():
     obs, _ = env.reset()
     assert env.data is not None
     env.close()
+
+
+from algorithms.lqr_controller import LQRController
+
+
+def test_lqr_controller_gain_computation():
+    I_body = np.diag([100.0, 100.0, 100.0])
+    lqr = LQRController(
+        I_body, max_torque=10.0,
+        Q_diag=(50.0, 50.0, 50.0, 10.0, 10.0, 10.0),
+        R_diag=(1.0, 1.0, 1.0),
+    )
+    assert lqr.K.shape == (3, 6)
+    assert np.all(np.isfinite(lqr.K))
+
+
+def test_lqr_control_output_bounded():
+    I_body = np.diag([500.0, 541.7, 541.7])
+    lqr = LQRController(I_body, max_torque=10.0)
+    attitude_err = np.array([0.5, -0.3, 0.1])
+    omega = np.array([0.2, 0.1, -0.05])
+    tau = lqr.compute(attitude_err, omega)
+    assert tau.shape == (3,)
+    assert np.all(np.abs(tau) <= 10.0 + 1e-6)
+
+
+def test_lqr_zero_error_gives_zero_torque():
+    I_body = np.diag([100.0, 100.0, 100.0])
+    lqr = LQRController(I_body, max_torque=10.0)
+    tau = lqr.compute(np.zeros(3), np.zeros(3))
+    assert np.allclose(tau, np.zeros(3), atol=1e-10)
