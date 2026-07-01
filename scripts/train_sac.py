@@ -23,7 +23,8 @@ def train(args):
     os.makedirs(args.checkpoint_dir, exist_ok=True)
     os.makedirs(args.log_dir, exist_ok=True)
     log_file = open(os.path.join(args.log_dir, "training_log.csv"), "w")
-    log_file.write("episode,total_reward,episode_length,success,alpha,actor_loss,critic_loss\n")
+    log_file.write("episode,total_reward,episode_length,success,alpha,actor_loss,critic_loss,"
+                   "pred_fuel_error,pred_fuel_uncertainty,target_fuel_final\n")
 
     best_reward = -np.inf
     print(f"SAC training: {args.episodes} episodes, max {args.max_steps} steps")
@@ -53,7 +54,11 @@ def train(args):
         success = info.get("target_fuel", 1.0) <= 0.0
         avg_critic = float(np.mean(critic_losses)) if critic_losses else 0.0
         avg_actor  = float(np.mean(actor_losses)) if actor_losses else 0.0
-        log_file.write(f"{episode},{ep_r:.4f},{step+1},{int(success)},{agent.alpha:.4f},{avg_actor:.4f},{avg_critic:.4f}\n")
+        pred_error = info.get("prediction_error", 0.0)
+        pred_uncert = info.get("prediction_uncertainty", 0.0)
+        log_file.write(f"{episode},{ep_r:.4f},{step+1},{int(success)},{agent.alpha:.4f},"
+                       f"{avg_actor:.4f},{avg_critic:.4f},"
+                       f"{pred_error:.4f},{pred_uncert:.4f},{info.get('target_fuel', 0):.4f}\n")
         log_file.flush()
 
         if (episode + 1) % 10 == 0:
