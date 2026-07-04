@@ -258,6 +258,9 @@ class SpacecraftTakeoverEnvV5(gym.Env):
         efficiency = fuel_burned_kg / max(self_burn + fuel_burned_kg, 1e-8)
         reward += SCALE * self.W_EFF * efficiency
 
+        # Compute attitude error (used for both penalty and terminal check)
+        att_err = float(np.linalg.norm(sigma_err))
+
         # Attitude penalty: continuous signal to prevent tumbling
         reward -= SCALE * self.W_ATT * att_err
 
@@ -273,7 +276,6 @@ class SpacecraftTakeoverEnvV5(gym.Env):
         # ── terminal ──────────────────────────────────────────────────────
         terminated = False
         truncated  = self._step_count >= self.max_steps
-        att_err    = float(np.linalg.norm(sigma_err))
 
         if self._fuel_mass <= 0.0:
             if not self._phase_switched:
