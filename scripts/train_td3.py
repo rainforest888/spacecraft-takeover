@@ -27,7 +27,7 @@ def train(args):
     log_path = os.path.join(args.log_dir, "training_log_v5.csv")
     log_file = open(log_path, "w")
     log_file.write("episode,total_reward,episode_length,success,actor_loss,critic_loss,"
-                   "dry_mass,fuel_mass_init,self_fuel_end,phase_switched,efficiency\n")
+                   "dry_mass,fuel_mass_init,self_fuel_end,phase_switched\n")
     log_file.flush()
 
     best_reward = -np.inf
@@ -80,8 +80,7 @@ def train(args):
         log_file.write(f"{episode},{ep_r:.4f},{step+1},{int(success)},{avg_actor:.4f},"
                        f"{avg_critic:.4f},"
                        f"{info.get('dry_mass', 0):.0f},{info.get('fuel_mass', 0):.0f},"
-                       f"{info.get('self_fuel', 0):.4f},{int(switched)},"
-                       f"{info.get('efficiency', 0):.4f}\n")
+                       f"{info.get('self_fuel', 0):.4f},{int(switched)}\n")
         log_file.flush()
 
         if (episode + 1) % 10 == 0:

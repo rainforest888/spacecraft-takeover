@@ -27,23 +27,22 @@ MODEL_PATH = os.path.join(os.path.dirname(__file__), "..", "models", "mjcf", "cl
 class SpacecraftTakeoverEnvV5(gym.Env):
     metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 60}
 
-    # ── reward weights (V5: efficiency-oriented) ─────────────────────────
+    # ── reward weights ────────────────────────────────────────────────────
     W_FUEL_BURN  = 10.0    # opponent fuel burned (kg)
-    W_SELF_BURN  = 3.0     # self fuel burned penalty
+    W_SELF_BURN  = 2.0     # self fuel burned penalty
     W_STEP       = 0.01    # per-step time cost
-    W_MASS       = 0.5     # mass-estimation auxiliary signal
-    W_EFF        = 2.0     # efficiency bonus
-    W_ATT        = 0.3     # attitude penalty (continuous, to prevent tumbling)
+    W_MASS       = 0.5     # mass-estimation auxiliary
+    W_ATT        = 1.0     # attitude penalty (continuous)
     R_SUCCESS    = 200.0   # opponent fuel fully depleted
     R_DETECT     = 100.0   # dry_mass detected → phase switch
     R_FAIL       = -100.0  # self fuel gone or tumbled
 
     # ── physical parameters ──────────────────────────────────────────────
-    MAX_TORQUE     = 5.0
-    FUEL_K_MASS    = 3.0     # kg fuel per (N·m·s) — faster target depletion
-    SELF_BURN_RATE = 0.012   # self fuel burn rate (×2 from V4)
-    INITIAL_FUEL   = 1.0     # chaser's own fuel (normalized)
-    MAX_ATT_ERR    = 2.0     # ~115° — still constraining, but more forgiving
+    MAX_TORQUE     = 7.0     # higher authority for better control
+    FUEL_K_MASS    = 3.0     # kg fuel per (N·m·s)
+    SELF_BURN_RATE = 0.012   # self fuel burn rate
+    INITIAL_FUEL   = 1.0
+    MAX_ATT_ERR    = 2.0     # ~115°
 
     CTL_DT   = 1.0 / 60.0
     SUBSTEPS = 30
@@ -83,10 +82,14 @@ class SpacecraftTakeoverEnvV5(gym.Env):
         self.observation_space = spaces.Box(low=obs_low, high=obs_high, dtype=np.float32)
         self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(3,), dtype=np.float32)
 
-        # ── target strategies: LQR + SMC + PID mixed ─────────────────────
-        strong = make_target_strategies_strong()
+        # ── target strategies: LQR only (predictable, focus on fuel-attitude tradeoff)
+        all_strategies = make_target_strategies_strong()
+        self.target_strategies = [s for s in all_strategies
+                                  if isinstance(s, TargetLQRController)]
+        # Also include regular LQR variants
         base = make_target_strategies()
-        self.target_strategies = strong + base
+        base_lqr = [s for s in base if isinstance(s, TargetLQRController)]
+        self.target_strategies += base_lqr
 
         # internal state
         self._step_count    = 0
@@ -248,15 +251,11 @@ class SpacecraftTakeoverEnvV5(gym.Env):
         if not self._phase_switched and self._mass_stable_ctr >= self.MASS_STABLE_STEPS:
             self._phase_switched = True
 
-        # ── reward (V5: efficiency-oriented) ──────────────────────────────
+        # ── reward ─────────────────────────────────────────────────────────
         SCALE = 0.01
         reward = SCALE * (self.W_FUEL_BURN * fuel_burned_kg
                           - self.W_SELF_BURN * self_burn
                           - self.W_STEP)
-
-        # Efficiency bonus: bounded ratio ∈ [0, 1]
-        efficiency = fuel_burned_kg / max(self_burn + fuel_burned_kg, 1e-8)
-        reward += SCALE * self.W_EFF * efficiency
 
         # Compute attitude error (used for both penalty and terminal check)
         att_err = float(np.linalg.norm(sigma_err))
@@ -308,7 +307,6 @@ class SpacecraftTakeoverEnvV5(gym.Env):
             "mass_response": self._mass_response,
             "phase_switched": self._phase_switched,
             "mass_stable_ctr": self._mass_stable_ctr,
-            "efficiency": efficiency,
         }
 
     # ── observation ──────────────────────────────────────────────────────
