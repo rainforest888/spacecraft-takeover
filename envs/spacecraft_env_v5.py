@@ -29,10 +29,11 @@ class SpacecraftTakeoverEnvV5(gym.Env):
 
     # ── reward weights (V5: efficiency-oriented) ─────────────────────────
     W_FUEL_BURN  = 10.0    # opponent fuel burned (kg)
-    W_SELF_BURN  = 5.0     # self fuel burned (×5 penalty, up from 1.0)
+    W_SELF_BURN  = 3.0     # self fuel burned penalty
     W_STEP       = 0.01    # per-step time cost
     W_MASS       = 0.5     # mass-estimation auxiliary signal
-    W_EFF        = 3.0     # NEW: efficiency bonus = fuel_burned / self_burn
+    W_EFF        = 2.0     # efficiency bonus
+    W_ATT        = 0.3     # attitude penalty (continuous, to prevent tumbling)
     R_SUCCESS    = 200.0   # opponent fuel fully depleted
     R_DETECT     = 100.0   # dry_mass detected → phase switch
     R_FAIL       = -100.0  # self fuel gone or tumbled
@@ -42,7 +43,7 @@ class SpacecraftTakeoverEnvV5(gym.Env):
     FUEL_K_MASS    = 3.0     # kg fuel per (N·m·s) — faster target depletion
     SELF_BURN_RATE = 0.012   # self fuel burn rate (×2 from V4)
     INITIAL_FUEL   = 1.0     # chaser's own fuel (normalized)
-    MAX_ATT_ERR    = np.pi / 2  # 90° (was 180°)
+    MAX_ATT_ERR    = 2.0     # ~115° — still constraining, but more forgiving
 
     CTL_DT   = 1.0 / 60.0
     SUBSTEPS = 30
@@ -256,6 +257,9 @@ class SpacecraftTakeoverEnvV5(gym.Env):
         # Efficiency bonus: bounded ratio ∈ [0, 1]
         efficiency = fuel_burned_kg / max(self_burn + fuel_burned_kg, 1e-8)
         reward += SCALE * self.W_EFF * efficiency
+
+        # Attitude penalty: continuous signal to prevent tumbling
+        reward -= SCALE * self.W_ATT * att_err
 
         # Mass estimation auxiliary
         mass_error = (self._est_mass - self._dry_mass)
