@@ -23,7 +23,7 @@ class GaussianActor(nn.Module):
     """Stochastic actor: outputs (mu, log_std) for each action dimension."""
 
     def __init__(self, obs_dim: int, action_dim: int, hidden_dim: int = 256,
-                 log_std_min: float = -20.0, log_std_max: float = 2.0):
+                 log_std_min: float = -5.0, log_std_max: float = 2.0):
         super().__init__()
         self.log_std_min = log_std_min
         self.log_std_max = log_std_max
@@ -120,7 +120,8 @@ class SACAgent:
                  actor_lr: float = 3e-4, critic_lr: float = 3e-4,
                  alpha_lr: float = 3e-4,
                  gamma: float = 0.99, tau: float = 0.005,
-                 target_entropy_coef: float = 1.0,
+                 target_entropy_coef: float = 0.5,
+                 fixed_alpha: float = None,
                  device: str = None):
         if device is None:
             device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -128,6 +129,7 @@ class SACAgent:
         self.gamma = gamma
         self.tau = tau
         self.action_dim = action_dim
+        self.fixed_alpha = fixed_alpha
 
         # Networks
         self.actor = GaussianActor(obs_dim, action_dim, hidden_dim).to(device)
@@ -136,10 +138,18 @@ class SACAgent:
         self.critic1_target = copy.deepcopy(self.critic1)
         self.critic2_target = copy.deepcopy(self.critic2)
 
-        # Entropy tuning
-        self.target_entropy = -target_entropy_coef * action_dim  # -dim(A) * coef
-        self.log_alpha = torch.zeros(1, requires_grad=True, device=device)
-        self.alpha = self.log_alpha.exp().item()
+        # Entropy tuning (or fixed alpha)
+        if fixed_alpha is not None:
+            self.alpha = fixed_alpha
+            self.log_alpha = None
+            self.alpha_optimizer = None
+            self.target_entropy = None
+        else:
+            self.target_entropy = -target_entropy_coef * action_dim
+            self.log_alpha = torch.zeros(1, requires_grad=True, device=device)
+            self.alpha = self.log_alpha.exp().item()
+            self.alpha_optimizer = optim.Adam([self.log_alpha], lr=alpha_lr)
+            self.alpha_min = 0.05
 
         # Optimizers
         self.actor_optimizer = optim.Adam(self.actor.parameters(), lr=actor_lr)
@@ -147,7 +157,6 @@ class SACAgent:
             list(self.critic1.parameters()) + list(self.critic2.parameters()),
             lr=critic_lr,
         )
-        self.alpha_optimizer = optim.Adam([self.log_alpha], lr=alpha_lr)
 
         self._update_count = 0
 
@@ -196,15 +205,18 @@ class SACAgent:
 
         self.actor_optimizer.zero_grad()
         actor_loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.actor.parameters(), 5.0)
         self.actor_optimizer.step()
 
         # --- Update alpha (entropy tuning) ---
-        alpha_loss = -(self.log_alpha * (log_probs.detach() + self.target_entropy)).mean()
-
-        self.alpha_optimizer.zero_grad()
-        alpha_loss.backward()
-        self.alpha_optimizer.step()
-        self.alpha = self.log_alpha.exp().item()
+        alpha_loss_val = 0.0
+        if self.alpha_optimizer is not None:
+            alpha_loss = -(self.log_alpha * (log_probs.detach() + self.target_entropy)).mean()
+            self.alpha_optimizer.zero_grad()
+            alpha_loss.backward()
+            self.alpha_optimizer.step()
+            self.alpha = max(self.alpha_min, self.log_alpha.exp().item())
+            alpha_loss_val = alpha_loss.item()
 
         # --- Soft update targets ---
         self._update_count += 1
@@ -216,7 +228,7 @@ class SACAgent:
         return {
             "critic_loss": critic_loss.item(),
             "actor_loss": actor_loss.item(),
-            "alpha_loss": alpha_loss.item(),
+            "alpha_loss": alpha_loss_val,
             "alpha": self.alpha,
         }
 
@@ -237,5 +249,6 @@ class SACAgent:
         self.critic2.load_state_dict(ckpt["critic2"])
         self.critic1_target.load_state_dict(ckpt["critic1_target"])
         self.critic2_target.load_state_dict(ckpt["critic2_target"])
-        self.log_alpha = ckpt["log_alpha"]
-        self.alpha = self.log_alpha.exp().item()
+        if self.log_alpha is not None:
+            self.log_alpha = ckpt["log_alpha"]
+            self.alpha = max(getattr(self, 'alpha_min', 0.01), self.log_alpha.exp().item())

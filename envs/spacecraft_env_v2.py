@@ -6,14 +6,17 @@ Core concept:
   - total_mass = dry_mass + fuel_mass  →  set on MJCF target_sat body
 
   Each step: fuel burns → MJCF body_mass & body_inertia decrease in real time.
-  Agent observes dynamics → estimates current mass.
-  As fuel depletes, estimated mass converges to dry_mass → phase switch → attitude hold.
+  The opponent's fuel is NOT observable. The agent must learn to estimate the
+  target's current mass implicitly from the dynamics response (angular
+  acceleration per unit applied torque), and switch to attitude hold once the
+  estimated mass converges to dry_mass.
 
-  Mass loss penalty: (estimated_mass - dry_mass)^2, driving the network to learn
-  mass estimation from dynamics alone.
+  Reward is intentionally simple (aligned with the DDPG+LQR baseline): a strong
+  positive signal for depleting the opponent's fuel, a small per-step cost, and
+  a down-weighted mass-estimation signal that no longer dominates the fuel reward.
 
-Observation: [sigma(3), ω(3), self_fuel(1), est_mass_norm(1), mass_change_rate(1),
-              tau_ma(1), dmass_detection(1), t_norm(1), att_err(1)] = 13 dims
+Observation: [sigma(3), omega(3), self_fuel(1), omega_dot(1),
+              inertia_response(1), att_err(1)] = 10 dims
 """
 
 import os
@@ -26,7 +29,9 @@ from envs.dynamics import (
     quat_to_mrp, mrp_error,
     compute_gravity_gradient_torque,
 )
-from algorithms.target_controllers import make_target_strategies_strong
+from algorithms.target_controllers import (
+    make_target_strategies_strong, TargetLQRController,
+)
 
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "..", "models", "mjcf", "combo_body.xml")
 
@@ -35,24 +40,25 @@ class SpacecraftTakeoverEnvV2(gym.Env):
     metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 60}
 
     # ── reward weights ─────────────────────────────────────────────────
-    W_FUEL      = 500.0    # excess target burn
-    W_SELF      = 15.0     # self fuel penalty
-    W_LYAP      = 10.0     # attitude error
-    W_SMOOTH    = 3.0      # action smoothness
-    W_MASS      = 200.0    # mass estimation accuracy penalty
-    R_SUCCESS   = 200.0    # target fuel fully depleted
-    R_FAIL      = -50.0    # self fuel gone or tumbled
-    R_DETECT    = 300.0    # dry_mass detected → phase switch
+    # Simple fuel-centric design (aligned with DDPG+LQR baseline).
+    # Main line:  r = 10.0 * delta_fb_target - 1.0 * delta_fs_self - 0.01
+    # Aux  line:  r -= 0.5 * ((est_mass - dry_mass) / dry_mass)^2
+    W_FUEL_BURN  = 10.0    # opponent fuel burned this step (kg)
+    W_SELF_BURN  = 1.0     # self fuel burned this step
+    W_STEP       = 0.01    # per-step time cost
+    W_MASS       = 0.5     # mass-estimation signal (down-weighted)
+    R_SUCCESS    = 200.0   # opponent fuel fully depleted
+    R_DETECT     = 100.0   # dry_mass detected → phase switch
+    R_FAIL       = -100.0  # self fuel gone or tumbled
 
     # ── physical parameters ────────────────────────────────────────────
-    MAX_TORQUE   = 12.0
+    MAX_TORQUE   = 5.0     # small spacecraft max torque (aligned with baseline)
     FUEL_K_MASS  = 2.0     # kg fuel burned per (N·m · s)
     INITIAL_FUEL = 1.0     # chaser's own fuel (normalized)
     MAX_ATT_ERR  = np.pi
 
     CTL_DT   = 1.0 / 60.0
     SUBSTEPS = 30
-    BASELINE_BURN = 0.0003
 
     # ── mass randomization ranges ──────────────────────────────────────
     # dry_mass changes every DRY_MASS_EPISODES (slowly-varying unknown)
@@ -66,6 +72,10 @@ class SpacecraftTakeoverEnvV2(gym.Env):
     MASS_HISTORY_WINDOW = 80
     MASS_STABLE_STEPS   = 10   # consecutive stable steps → detected
     MASS_STABLE_EPS     = 3.0   # kg: mass change < this = stable
+
+    # threshold below which applied torque is "too small" for a reliable
+    # inertia-response reading → inertia_response forced to 0
+    TAU_RESPONSE_FLOOR = 0.1
 
     def __init__(self, render_mode=None, max_steps=600):
         super().__init__()
@@ -83,29 +93,32 @@ class SpacecraftTakeoverEnvV2(gym.Env):
         self._orig_target_inertia = self.model.body_inertia[self._target_bid].copy()
         self._orig_inertia_ratio = self._orig_target_inertia / self._orig_target_mass
 
-        # ── observation: 13 dim ─────────────────────────────────────────
+        # ── observation: 10 dim ─────────────────────────────────────────
+        # [sigma(3), omega(3), self_fuel(1), omega_dot(1),
+        #  inertia_response(1), att_err(1)]
         obs_high = np.array(
-            [np.inf]*6 + [1.0, 1.0, 1.0, np.inf, 1.0, 1.0, np.inf],
+            [np.inf]*6 + [1.0, np.inf, 1.0, np.inf],
             dtype=np.float32)
         obs_low  = np.array(
-            [-np.inf]*6 + [0.0, -1.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            [-np.inf]*6 + [0.0, 0.0, 0.0, 0.0],
             dtype=np.float32)
         self.observation_space = spaces.Box(low=obs_low, high=obs_high, dtype=np.float32)
         self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(3,), dtype=np.float32)
 
-        self.target_strategies = make_target_strategies_strong()
+        # ── target strategies: LQR only (diversity added later) ─────────
+        all_strategies = make_target_strategies_strong()
+        self.target_strategies = [s for s in all_strategies
+                                  if isinstance(s, TargetLQRController)]
         self._current_strategy = None
 
         # internal state
         self._step_count    = 0
         self._self_fuel     = 1.0
         self._target_fuel   = 1.0
-        self._tau_history   = []
-        self._tau_ma        = 0.0
-        self._prev_tau_mag  = 0.0
-        self._prev_action   = np.zeros(3)
         self._prev_omega    = np.zeros(3)
         self._alpha         = np.zeros(3)
+        self._last_tau_self_mag = 0.0
+        self._mass_response = 0.0
 
         # ── mass tracking ───────────────────────────────────────────────
         self._dry_mass       = 500.0
@@ -116,7 +129,7 @@ class SpacecraftTakeoverEnvV2(gym.Env):
         self._cumulative_target_torque = 0.0  # Σ ||τ_target|| * dt
         self._mass_fuel_k    = 2.0  # kg fuel per (N·m·s) — matches FUEL_K_MASS
 
-        # Mass estimation: simple EMA of dynamic response ratio
+        # Mass estimation: cumulative-torque-based proxy
         self._est_mass       = 600.0      # agent's mass estimate
         self._est_mass_ema   = 600.0
         self._mass_history   = []         # sliding window of estimates
@@ -155,12 +168,10 @@ class SpacecraftTakeoverEnvV2(gym.Env):
         self._step_count = 0
         self._self_fuel  = self.INITIAL_FUEL
         self._target_fuel = 1.0
-        self._tau_history.clear()
-        self._tau_ma       = 0.0
-        self._prev_tau_mag = 0.0
-        self._prev_action  = np.zeros(3)
         self._prev_omega   = self.data.qvel[0:3].copy()
         self._alpha        = np.zeros(3)
+        self._last_tau_self_mag = 0.0
+        self._mass_response = 0.0
 
         # Mass estimation init
         self._cumulative_target_torque = 0.0
@@ -172,7 +183,7 @@ class SpacecraftTakeoverEnvV2(gym.Env):
         self._phase_switched = False
         self._bonus_given = False
 
-        # ── pick target strategy ────────────────────────────────────────
+        # ── pick target strategy (LQR only) ─────────────────────────────
         idx = rng.integers(0, len(self.target_strategies))
         self._current_strategy = self.target_strategies[idx]
         if hasattr(self._current_strategy, 'reset'):
@@ -194,6 +205,8 @@ class SpacecraftTakeoverEnvV2(gym.Env):
         action = np.asarray(action, dtype=np.float64)
         action_clipped = np.clip(action, -1.0, 1.0)
         tau_self = action_clipped * self.MAX_TORQUE
+        tau_self_mag = float(np.linalg.norm(tau_self))
+        self._last_tau_self_mag = tau_self_mag
 
         # ── target response ────────────────────────────────────────────
         sigma_cur  = self._get_mrp()
@@ -213,7 +226,7 @@ class SpacecraftTakeoverEnvV2(gym.Env):
         omega_new = self.data.qvel[0:3].copy()
 
         # ── chaser fuel ─────────────────────────────────────────────────
-        self_burn = float(self.CTL_DT * np.linalg.norm(tau_self) * 0.006)
+        self_burn = float(self.CTL_DT * tau_self_mag * 0.006)
         self._self_fuel -= self_burn
 
         # ── target fuel & MASS reduction ────────────────────────────────
@@ -233,15 +246,8 @@ class SpacecraftTakeoverEnvV2(gym.Env):
         # Re-forward to update cached derived quantities
         mujoco.mj_forward(self.model, self.data)
 
-        # ── torque tracking ────────────────────────────────────────────
-        self._tau_history.append(tau_mag)
-        if len(self._tau_history) > 30:
-            self._tau_history.pop(0)
-        self._tau_ma = np.mean(self._tau_history) if self._tau_history else tau_mag
-        self._prev_tau_mag = tau_mag
-
-        # Cumulative target torque (for mass estimation proxy)
-        # Only accumulate while fuel remains — once depleted, mass stops changing
+        # Cumulative target torque (for mass estimation proxy).
+        # Only accumulate while fuel remains — once depleted, mass stops changing.
         if self._fuel_mass > 0:
             self._cumulative_target_torque += tau_mag * self.CTL_DT
 
@@ -249,14 +255,21 @@ class SpacecraftTakeoverEnvV2(gym.Env):
         self._alpha = (omega_new - self._prev_omega) / self.CTL_DT
         self._prev_omega = omega_new.copy()
 
+        # ── inertia response: ||alpha|| / ||tau_self|| (≈ 1 / inertia) ──
+        # Large mass → small response. If tau_self too small to be informative,
+        # force to 0 (avoid division blow-up from target torque transients).
+        if tau_self_mag > self.TAU_RESPONSE_FLOOR:
+            raw_response = float(np.linalg.norm(self._alpha) /
+                                 (tau_self_mag + 0.01))
+            # Cap extreme transients (target LQR can spike to 50 N·m)
+            self._mass_response = min(raw_response, 0.2)
+        else:
+            self._mass_response = 0.0
+
         # ── mass estimation: cumulative torque-based proxy ───────────────
         # fuel_burned_est = cum_torque * k; est_mass = initial_guess - fuel_burned
-        # The SAC network learns to correct k and initial_guess via mass_loss
         cum_torque = self._cumulative_target_torque
         fuel_burned_est = cum_torque * self._mass_fuel_k
-        # initial_guess starts at total_mass, network bias-corrects over time
-        if not hasattr(self, '_mass_initial_guess'):
-            self._mass_initial_guess = self._total_mass
         self._est_mass = self._mass_initial_guess - fuel_burned_est
         self._est_mass_ema = 0.9 * self._est_mass_ema + 0.1 * self._est_mass
 
@@ -280,19 +293,23 @@ class SpacecraftTakeoverEnvV2(gym.Env):
             self._phase_switched = True
 
         # ── reward ─────────────────────────────────────────────────────
-        reward = self._compute_reward(target_burn=tau_mag * self.CTL_DT * 0.006,
-                                      self_burn=self_burn,
-                                      att_err=sigma_err,
-                                      action=action_clipped)
+        # Main line: fuel-centric (opponent burn rewarded, self burn penalized,
+        # small per-step cost). No attitude penalty in the main line — attitude
+        # is only checked as a failure condition.
+        # Reward is scaled down by 100x to keep Q-values in a manageable range
+        # for critic learning stability.
+        SCALE = 0.01
+        reward = SCALE * (self.W_FUEL_BURN * fuel_burned_kg
+                          - self.W_SELF_BURN * self_burn
+                          - self.W_STEP)
 
-        # Mass estimation loss: encourage agent to estimate dry_mass
+        # Aux line: down-weighted mass-estimation signal.
         mass_error = (self._est_mass - self._dry_mass)
-        r_mass = -self.W_MASS * (mass_error / max(self._dry_mass, 1.0)) ** 2
-        reward += r_mass
+        reward -= SCALE * self.W_MASS * (mass_error / max(self._dry_mass, 1.0)) ** 2
 
-        # Phase switch bonus (once per episode)
+        # Phase switch bonus (once per episode): dry_mass detected.
         if self._phase_switched and not self._bonus_given:
-            reward += self.R_DETECT
+            reward += SCALE * self.R_DETECT
             self._bonus_given = True
 
         # ── terminal ───────────────────────────────────────────────────
@@ -301,19 +318,20 @@ class SpacecraftTakeoverEnvV2(gym.Env):
         att_err    = float(np.linalg.norm(sigma_err))
 
         if self._fuel_mass <= 0.0:
-            # Fuel depleted — trigger phase switch, continue for attitude hold
+            # Opponent fuel depleted — success. Trigger phase switch and
+            # continue for attitude hold, but reward the successful depletion.
             if not self._phase_switched:
                 self._phase_switched = True
-                reward += self.R_SUCCESS  # still reward successful depletion
-            # Don't terminate — continue episode for attitude maintenance
+            reward += SCALE * self.R_SUCCESS
             self._fuel_mass = 0.0
             self._total_mass = self._dry_mass
         elif self._self_fuel <= 0.0:
-            terminated = True; reward += self.R_FAIL
+            terminated = True
+            reward += SCALE * self.R_FAIL
         elif att_err > self.MAX_ATT_ERR:
-            terminated = True; reward += self.R_FAIL
+            terminated = True
+            reward += SCALE * self.R_FAIL
 
-        self._prev_action = action_clipped.copy()
         obs = self._get_obs()
         return obs, reward, terminated, truncated, {
             "self_fuel": self._self_fuel,
@@ -331,6 +349,7 @@ class SpacecraftTakeoverEnvV2(gym.Env):
             # ── estimated values ──
             "est_mass": self._est_mass,
             "mass_error": mass_error,
+            "mass_response": self._mass_response,
             # ── phase switch ──
             "phase_switched": self._phase_switched,
             "mass_stable_ctr": self._mass_stable_ctr,
@@ -341,40 +360,26 @@ class SpacecraftTakeoverEnvV2(gym.Env):
         sigma = self._get_mrp()
         omega = self.data.qvel[0:3].copy()
         att_err = float(np.linalg.norm(sigma))
-        tau_ma  = self._tau_ma
-        t_norm  = min(self._step_count / max(self.max_steps, 1), 1.0)
 
-        # Mass estimation features (normalized for network)
-        est_mass_norm = self._est_mass / 800.0        # ~ [0.5, 1.0]
-        if len(self._mass_history) >= 10:
-            mass_change_rate = abs(self._est_mass - self._mass_history[-10]) / (
-                10 * self.CTL_DT + 1e-6)
-        else:
-            mass_change_rate = 0.0
-        mass_change_norm = min(1.0, mass_change_rate / 5.0)  # clip to [0,1]
-        dmass_detection = min(1.0, self._mass_stable_ctr / self.MASS_STABLE_STEPS)
+        # normalized angular acceleration (alpha ~0.3-0.8, clipped to [0,1])
+        omega_dot = min(1.0, float(np.linalg.norm(self._alpha)) / 2.0)
+
+        # inertia response: large mass → small response. Mean ~0.077-0.096.
+        # 400kg→0.096, 600kg→0.077 (25% separation visible to network).
+        # Normalize by 0.15 → ~0.5-0.64.
+        inertia_response = min(1.0, self._mass_response / 0.15)
 
         return np.array([
             sigma[0], sigma[1], sigma[2],
             omega[0], omega[1], omega[2],
             float(np.clip(self._self_fuel, 0.0, 1.0)),
-            est_mass_norm,
-            mass_change_norm,
-            tau_ma / max(tau_ma + 5.0, 1.0),
-            dmass_detection,
-            t_norm,
+            omega_dot,
+            inertia_response,
             att_err,
         ], dtype=np.float32)
 
     def _get_mrp(self) -> np.ndarray:
         return quat_to_mrp(self.data.qpos[3:7].copy())
-
-    def _compute_reward(self, target_burn, self_burn, att_err, action):
-        excess = max(0.0, target_burn - self.BASELINE_BURN)
-        return (self.W_FUEL * excess
-                - self.W_SELF * self_burn
-                - self.W_LYAP * float(np.linalg.norm(att_err))
-                - self.W_SMOOTH * float(np.linalg.norm(action - self._prev_action)))
 
     def render(self):
         if self.render_mode == "rgb_array":
