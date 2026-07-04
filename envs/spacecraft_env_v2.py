@@ -65,8 +65,8 @@ class SpacecraftTakeoverEnvV2(gym.Env):
     DRY_MASS_MIN = 400.0   # kg
     DRY_MASS_MAX = 600.0   # kg
     DRY_MASS_EPISODES = 100
-    FUEL_MASS_MIN = 50.0   # kg
-    FUEL_MASS_MAX = 200.0  # kg
+    FUEL_MASS_MIN = 100.0   # kg (realistic propellant range)
+    FUEL_MASS_MAX = 150.0   # kg
 
     # ── mass estimation / phase switch ─────────────────────────────────
     MASS_HISTORY_WINDOW = 80
