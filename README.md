@@ -6,22 +6,53 @@
 
 ## 训练结果
 
-| 版本 | 成功率 | 关键改动 |
-|------|--------|----------|
-| v1 | 0% | 6-term reward，alpha 坍塌 |
-| v2 | 46.5% | reward scaling + LQR only |
-| v3 | 76-80%→坍塌 | MAX_TORQUE=5，信号归一化 |
-| **v4** | **75.8%** | **固定 alpha=0.2，稳定收敛** |
+| 版本 | 算法 | 成功率 | 关键改动 |
+|------|------|--------|----------|
+| v1 | SAC | 0% | 6-term reward，alpha 坍塌 |
+| v2 | SAC | 46.5% | reward scaling + LQR only |
+| v3 | SAC | 76-80%→坍塌 | MAX_TORQUE=5，信号归一化 |
+| v4 | SAC | 75.8% | 固定 alpha=0.2，稳定收敛 |
+| v5 TD3 | TD3 | 75.6% | 爪型机构 + 效率奖励 |
+| **v5 SAC** | **SAC** | **91.0% (eval 93%)** | **爪型机构 + LQR-only + 姿态惩罚 + MAX_TORQUE=7** |
 
-最终：500 集训练，379/500 成功（75.8%），在 100-300 集区间达到 78-82%。
+最终：SAC V5 — 1000 集训练，910/1000 成功（91.0%），确定性评估 93/100（93%）。
 
 ## 快速开始
+
+### MJCF 模型
+
+V5 使用**爪型机构模型**（`models/mjcf/claw_body.xml`）：
+- 服务星（100kg）+ 4 根爪臂形成笼状结构
+- 目标星（400-600kg + 100-150kg 燃料）被包裹在爪笼内
+- weld 约束保持相对静止状态
 
 ### 环境要求
 
 - Windows 10 + MSYS (git-bash)
 - Conda 环境 `spacraft`：Python 3.11, MuJoCo 3.6.0, PyTorch 2.12
 - GPU：RTX 5060 8GB（CPU 训练也可，但较慢）
+
+### 评估
+
+```bash
+# 加载最佳模型，100 集确定性评估
+"G:\Conda\envs\spacraft\python.exe" -c "
+import sys; sys.path.insert(0,'.')
+from envs.spacecraft_env_v5 import SpacecraftTakeoverEnvV5
+from algorithms.sac_agent import SACAgent
+agent = SACAgent(obs_dim=10, action_dim=3, hidden_dim=256, fixed_alpha=0.1)
+agent.load('outputs/checkpoints/best_sac_v5.pt')
+agent.actor.eval()
+env = SpacecraftTakeoverEnvV5(max_steps=600)
+for ep in range(10):
+    obs, info = env.reset()
+    for _ in range(600):
+        obs, r, t, tr, info = env.step(agent.select_action(obs, deterministic=True))
+        if t or tr: break
+    print(f'Ep {ep}: success={info[\"target_fuel\"]<=0}, steps={info.get(\"step\",\"?\")}')
+env.close()
+"
+```
 
 ### 验证环境
 
@@ -46,11 +77,11 @@ env.close()
 ### 训练
 
 ```bash
-# 500 集（约 1 小时）
-"G:\Conda\envs\spacraft\python.exe" scripts/train_sac.py --episodes 500
+# V5 SAC 训练（1000 集，约 2 小时）
+"G:\Conda\envs\spacraft\python.exe" scripts/train_sac_v5.py --episodes 1000
 
-# 3000 集完整训练（约 6 小时）
-"G:\Conda\envs\spacraft\python.exe" scripts/train_sac.py --episodes 3000 --save-every 500
+# V5 TD3 训练（备选）
+"G:\Conda\envs\spacraft\python.exe" scripts/train_td3.py --episodes 1000
 ```
 
 ## 项目结构
