@@ -1,0 +1,90 @@
+<mujoco model="spacecraft_claw">
+  <compiler angle="radian" meshdir="../meshes"/>
+
+  <option timestep="0.002" gravity="0 0 0"/>
+
+  <visual>
+    <global offwidth="1920" offheight="1920"/>
+  </visual>
+
+  <default>
+    <geom rgba="0.5 0.5 0.5 1"/>
+  </default>
+
+  <worldbody>
+    <!-- ═══ Service Satellite + Claw Arms ═══ -->
+    <body name="service_sat" pos="0 0 0">
+      <freejoint/>
+      <inertial pos="0 0 0" mass="100"
+                diaginertia="16.667 16.667 16.667"/>
+      <!-- Central body -->
+      <geom name="service_body" type="box" size="0.2 0.2 0.2"
+            rgba="0.2 0.5 0.8 1"/>
+
+      <!-- 4 Claw arms extending +X, forming a cage -->
+      <geom name="claw_top"    type="box" size="0.05 0.05 0.35"
+            pos="0.25 0.25 0"    rgba="0.5 0.5 0.5 1"/>
+      <geom name="claw_bottom" type="box" size="0.05 0.05 0.35"
+            pos="0.25 -0.25 0"   rgba="0.5 0.5 0.5 1"/>
+      <geom name="claw_left"   type="box" size="0.05 0.05 0.35"
+            pos="0.25 0 0.25"    rgba="0.5 0.5 0.5 1"/>
+      <geom name="claw_right"  type="box" size="0.05 0.05 0.35"
+            pos="0.25 0 -0.25"   rgba="0.5 0.5 0.5 1"/>
+
+      <!-- Claw crossbars at tips -->
+      <geom name="claw_ring_t" type="box" size="0.02 0.25 0.02"
+            pos="0.55 0.25 0"    rgba="0.6 0.6 0.6 1"/>
+      <geom name="claw_ring_b" type="box" size="0.02 0.25 0.02"
+            pos="0.55 -0.25 0"   rgba="0.6 0.6 0.6 1"/>
+      <geom name="claw_ring_l" type="box" size="0.02 0.02 0.25"
+            pos="0.55 0 0.25"    rgba="0.6 0.6 0.6 1"/>
+      <geom name="claw_ring_r" type="box" size="0.02 0.02 0.25"
+            pos="0.55 0 -0.25"   rgba="0.6 0.6 0.6 1"/>
+
+      <!-- Thruster sites -->
+      <site name="s_thr_px" pos="0.25 0 0"    euler="0 1.5708 0"/>
+      <site name="s_thr_nx" pos="-0.25 0 0"   euler="0 -1.5708 0"/>
+      <site name="s_thr_py" pos="0 0.25 0"    euler="-1.5708 0 0"/>
+      <site name="s_thr_ny" pos="0 -0.25 0"   euler="1.5708 0 0"/>
+      <site name="s_thr_pz" pos="0 0 0.25"    euler="0 0 0"/>
+      <site name="s_thr_nz" pos="0 0 -0.25"   euler="3.1416 0 0"/>
+      <site name="s_thr_aux1" pos="0.15 0.15 0.15"   euler="0.785 0.615 0"/>
+      <site name="s_thr_aux2" pos="-0.15 -0.15 -0.15" euler="-2.356 0.615 0"/>
+    </body>
+
+    <!-- ═══ Target Spacecraft (inside claw cage) ═══ -->
+    <body name="target_sat" pos="1.0 0 0">
+      <freejoint/>
+      <inertial pos="0 0 0" mass="500"
+                diaginertia="416.667 541.667 541.667"/>
+      <geom name="target_body" type="box" size="0.5 0.25 0.25"
+            rgba="0.8 0.2 0.2 1"/>
+      <!-- Solar panels -->
+      <geom name="target_panel_py" type="box" size="0.03 0.8 0.25"
+            pos="0 1.05 0" rgba="0.1 0.3 0.8 0.7"/>
+      <geom name="target_panel_ny" type="box" size="0.03 0.8 0.25"
+            pos="0 -1.05 0" rgba="0.1 0.3 0.8 0.7"/>
+
+      <!-- Thruster sites -->
+      <site name="t_thr_px" pos="0.53 0 0"    euler="0 1.5708 0"/>
+      <site name="t_thr_nx" pos="-0.53 0 0"   euler="0 -1.5708 0"/>
+      <site name="t_thr_py" pos="0 0.28 0"    euler="-1.5708 0 0"/>
+      <site name="t_thr_ny" pos="0 -0.28 0"   euler="1.5708 0 0"/>
+      <site name="t_thr_pz" pos="0 0 0.28"    euler="0 0 0"/>
+      <site name="t_thr_nz" pos="0 0 -0.28"   euler="3.1416 0 0"/>
+      <site name="t_thr_aux1" pos="0.2 0.2 0.2"    euler="0.785 0.615 0"/>
+      <site name="t_thr_aux2" pos="-0.2 -0.2 -0.2" euler="-2.356 0.615 0"/>
+    </body>
+  </worldbody>
+
+  <equality>
+    <weld name="captured" body1="service_sat" body2="target_sat"
+          relpose="1.0 0 0 1 0 0 0"/>
+  </equality>
+
+  <actuator>
+    <general name="tau_x" site="s_thr_px" gaintype="fixed"/>
+    <general name="tau_y" site="s_thr_py" gaintype="fixed"/>
+    <general name="tau_z" site="s_thr_pz" gaintype="fixed"/>
+  </actuator>
+</mujoco>
