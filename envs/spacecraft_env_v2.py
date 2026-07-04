@@ -77,10 +77,11 @@ class SpacecraftTakeoverEnvV2(gym.Env):
     # inertia-response reading → inertia_response forced to 0
     TAU_RESPONSE_FLOOR = 0.1
 
-    def __init__(self, render_mode=None, max_steps=600):
+    def __init__(self, render_mode=None, max_steps=600, ablated_dims=None):
         super().__init__()
         self.render_mode = render_mode
         self.max_steps = max_steps
+        self.ablated_dims = ablated_dims or []  # observation indices to zero out
 
         self.model = mujoco.MjModel.from_xml_path(MODEL_PATH)
         self.data  = mujoco.MjData(self.model)
@@ -369,7 +370,7 @@ class SpacecraftTakeoverEnvV2(gym.Env):
         # Normalize by 0.15 → ~0.5-0.64.
         inertia_response = min(1.0, self._mass_response / 0.15)
 
-        return np.array([
+        obs = np.array([
             sigma[0], sigma[1], sigma[2],
             omega[0], omega[1], omega[2],
             float(np.clip(self._self_fuel, 0.0, 1.0)),
@@ -377,6 +378,12 @@ class SpacecraftTakeoverEnvV2(gym.Env):
             inertia_response,
             att_err,
         ], dtype=np.float32)
+
+        # Zero out ablated dimensions for ablation studies
+        for dim in self.ablated_dims:
+            obs[dim] = 0.0
+
+        return obs
 
     def _get_mrp(self) -> np.ndarray:
         return quat_to_mrp(self.data.qpos[3:7].copy())
