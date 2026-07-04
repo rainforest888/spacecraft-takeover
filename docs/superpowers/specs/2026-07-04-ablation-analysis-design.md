@@ -91,8 +91,9 @@ Add `ablated_dims: list[int]` parameter to `SpacecraftTakeoverEnvV2`. In `_get_o
 ### 4.1 Experiment C1 — Mass Sweep
 
 - Freeze `best.pt` (no training)
-- Sweep over 12 mass conditions: `dry_mass ∈ {400, 500, 600}` × `fuel_mass ∈ {50, 100, 150, 200}`
+- Sweep over 12 mass conditions: `dry_mass ∈ {400, 500, 600}` × `fuel_mass ∈ {100, 116, 133, 150}`
 - 20 episodes per condition = 240 total eval episodes
+- Note: fuel range (100–150 kg) matches realistic spacecraft propellant mass; requires updating env `FUEL_MASS_MIN=100, FUEL_MASS_MAX=150`
 - Hypothesis: success rate should be higher for lighter/less-fuel targets — confirms agent adapts to mass
 
 ### 4.2 Experiment C2 — Signal Perturbation
@@ -119,6 +120,14 @@ Add `ablated_dims: list[int]` parameter to `SpacecraftTakeoverEnvV2`. In `_get_o
 ---
 
 ## 5. Execution Order
+
+### 5.1 Prerequisite: Fix Fuel Mass Range
+
+Update `SpacecraftTakeoverEnvV2` to realistic propellant range:
+- `FUEL_MASS_MIN`: 50 → **100** kg
+- `FUEL_MASS_MAX`: 200 → **150** kg
+
+### 5.2 Analysis Order
 
 ```
 A (existing data, ~5 min) → C (existing model, ~30 min) → B (train variants, ~1.5 hr)
