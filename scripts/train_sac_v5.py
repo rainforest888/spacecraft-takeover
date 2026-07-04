@@ -17,7 +17,7 @@ def train(args):
         obs_dim=obs_dim, action_dim=act_dim, hidden_dim=args.hidden_dim,
         actor_lr=args.actor_lr, critic_lr=args.critic_lr, alpha_lr=args.alpha_lr,
         gamma=args.gamma, tau=args.tau,
-        fixed_alpha=0.15,  # lower than v4 (0.2) for better exploitation
+        fixed_alpha=0.1,  # lower for better exploitation in deterministic env
     )
     buffer = ReplayBuffer(args.buffer_size, obs_dim, act_dim)
 
