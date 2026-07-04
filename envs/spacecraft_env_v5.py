@@ -253,8 +253,8 @@ class SpacecraftTakeoverEnvV5(gym.Env):
                           - self.W_SELF_BURN * self_burn
                           - self.W_STEP)
 
-        # Efficiency bonus: fuel burned per unit of self fuel
-        efficiency = fuel_burned_kg / max(self_burn, 1e-8)
+        # Efficiency bonus: bounded ratio ∈ [0, 1]
+        efficiency = fuel_burned_kg / max(self_burn + fuel_burned_kg, 1e-8)
         reward += SCALE * self.W_EFF * efficiency
 
         # Mass estimation auxiliary
