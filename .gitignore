@@ -8,13 +8,11 @@ __pycache__/
 .env/
 conda-env/
 
-# Model weights
-outputs/checkpoints/*.pt
-outputs/checkpoints/*.pth
+# Model weights (large binaries, regeneratable)
+outputs/checkpoints/
 
-# Videos (large)
-outputs/videos/*.mp4
-outputs/videos/*.avi
+# Videos (large binaries)
+outputs/videos/
 
 # Logs
 outputs/logs/*.tfevents*
@@ -27,6 +25,14 @@ models/solidworks/*~
 # IDE
 .vscode/
 .idea/
+
+# External reference code (not part of this project)
+ALTITUDE-FIGHT-3D-LQR/
+ALTITUDE-FIGHT-3D-LQR.rar
+
+# Temp / diagnostic files
+MUJOCO_LOG.TXT
+mass_estimator_test.png
 
 # OS
 .DS_Store

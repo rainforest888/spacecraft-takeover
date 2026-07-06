@@ -1,0 +1,22 @@
+TRAINING: h512_b50k_u2  ms=600  sb=2.0  att=1.0  omega=0.0  eps=200  hdim=512  buf=50000  utd=2
+Ep   10/200  succ=90.0%  elapsed=109s  eta=2065s
+Ep   20/200  succ=95.0%  elapsed=233s  eta=2097s
+Ep   30/200  succ=96.7%  elapsed=375s  eta=2128s
+Ep   40/200  succ=95.0%  elapsed=582s  eta=2329s
+Ep   50/200  succ=92.0%  elapsed=770s  eta=2310s
+Ep   60/200  succ=93.3%  elapsed=933s  eta=2178s
+Ep   70/200  succ=91.4%  elapsed=1069s  eta=1985s
+Ep   80/200  succ=87.5%  elapsed=1193s  eta=1789s
+Ep   90/200  succ=86.7%  elapsed=1347s  eta=1647s
+Ep  100/200  succ=87.0%  elapsed=1515s  eta=1515s
+Ep  110/200  succ=86.4%  elapsed=1688s  eta=1381s
+Ep  120/200  succ=86.7%  elapsed=1884s  eta=1256s
+Ep  130/200  succ=86.2%  elapsed=2063s  eta=1111s
+Ep  140/200  succ=87.1%  elapsed=2277s  eta=976s
+Ep  150/200  succ=88.0%  elapsed=2493s  eta=831s
+Ep  160/200  succ=88.8%  elapsed=2706s  eta=677s
+Ep  170/200  succ=89.4%  elapsed=2913s  eta=514s
+Ep  180/200  succ=90.0%  elapsed=3119s  eta=347s
+Ep  190/200  succ=90.0%  elapsed=3307s  eta=174s
+Ep  200/200  succ=90.5%  elapsed=3512s  eta=0s
+>>> [h512_b50k_u2] 90.5% (181/200) in 3512s  best_so_far=96.7% @ ep30

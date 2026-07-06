@@ -1,0 +1,12 @@
+TRAINING: baseline  ms=600  sb=2.0  att=1.0  eps=100
+Ep   10/100  succ=90.0%  elapsed=61s  eta=548s
+Ep   20/100  succ=85.0%  elapsed=117s  eta=470s
+Ep   30/100  succ=90.0%  elapsed=185s  eta=432s
+Ep   40/100  succ=92.5%  elapsed=250s  eta=376s
+Ep   50/100  succ=88.0%  elapsed=301s  eta=301s
+Ep   60/100  succ=88.3%  elapsed=361s  eta=241s
+Ep   70/100  succ=87.1%  elapsed=417s  eta=179s
+Ep   80/100  succ=87.5%  elapsed=479s  eta=120s
+Ep   90/100  succ=87.8%  elapsed=539s  eta=60s
+Ep  100/100  succ=88.0%  elapsed=601s  eta=0s
+>>> [baseline] 88.0% (88/100) in 601s

@@ -9,7 +9,12 @@ from algorithms.sac_agent import SACAgent, ReplayBuffer
 
 
 def train(args):
-    env = SpacecraftTakeoverEnvV5(max_steps=args.max_steps)
+    env = SpacecraftTakeoverEnvV5(
+        max_steps=args.max_steps,
+        w_fuel_burn=args.w_fuel_burn,
+        w_self_burn=args.w_self_burn,
+        w_att=args.w_att,
+    )
     obs_dim = env.observation_space.shape[0]
     act_dim = env.action_space.shape[0]
 
@@ -17,13 +22,16 @@ def train(args):
         obs_dim=obs_dim, action_dim=act_dim, hidden_dim=args.hidden_dim,
         actor_lr=args.actor_lr, critic_lr=args.critic_lr, alpha_lr=args.alpha_lr,
         gamma=args.gamma, tau=args.tau,
-        fixed_alpha=0.1,  # lower for better exploitation in deterministic env
+        fixed_alpha=0.1,
     )
     buffer = ReplayBuffer(args.buffer_size, obs_dim, act_dim)
 
     os.makedirs(args.checkpoint_dir, exist_ok=True)
     os.makedirs(args.log_dir, exist_ok=True)
-    log_path = os.path.join(args.log_dir, "training_log_sac_v5.csv")
+
+    # Unique log name based on config
+    tag = f"ms{args.max_steps}_fb{args.w_fuel_burn}_sb{args.w_self_burn}_att{args.w_att}"
+    log_path = os.path.join(args.log_dir, f"train_{tag}.csv")
     log_file = open(log_path, "w")
     log_file.write("episode,total_reward,episode_length,success,alpha,actor_loss,critic_loss,"
                    "dry_mass,fuel_mass_init,self_fuel_end,phase_switched\n")
@@ -32,9 +40,10 @@ def train(args):
     best_reward = -np.inf
     success_count = 0
     print(f"SAC V5 training: {args.episodes} episodes, max {args.max_steps} steps")
+    print(f"Config: W_FUEL={env.W_FUEL_BURN}  W_SELF={env.W_SELF_BURN}  W_ATT={env.W_ATT}")
     print(f"Obs dim: {obs_dim}  |  Act dim: {act_dim}")
     print(f"Device: {agent.device}  |  Alpha: {agent.alpha:.3f} (fixed)")
-    print(f"Model: claw_body.xml\n")
+    print(f"Log: {log_path}\n")
 
     for episode in range(args.episodes):
         obs, info = env.reset()
@@ -83,23 +92,28 @@ def train(args):
 
         if ep_r > best_reward:
             best_reward = ep_r
-            agent.save(os.path.join(args.checkpoint_dir, "best_sac_v5.pt"))
+            ckpt_name = f"best_{tag}.pt"
+            agent.save(os.path.join(args.checkpoint_dir, ckpt_name))
 
         if (episode + 1) % args.save_every == 0:
-            agent.save(os.path.join(args.checkpoint_dir, f"sac_v5_ep{episode+1}.pt"))
+            agent.save(os.path.join(args.checkpoint_dir, f"sac_{tag}_ep{episode+1}.pt"))
 
-    agent.save(os.path.join(args.checkpoint_dir, "final_sac_v5.pt"))
+    agent.save(os.path.join(args.checkpoint_dir, f"final_{tag}.pt"))
     log_file.close()
     env.close()
     final_rate = success_count / args.episodes * 100
-    print(f"\nSAC V5 complete. Best reward: {best_reward:.2f}  |  "
+    print(f"\nSAC V5 [{tag}] complete. Best reward: {best_reward:.2f}  |  "
           f"Final success rate: {final_rate:.1f}% [{success_count}/{args.episodes}]")
+    return final_rate
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="SAC training for V5 spacecraft takeover")
     parser.add_argument("--episodes",       type=int,   default=1000)
     parser.add_argument("--max-steps",      type=int,   default=600)
+    parser.add_argument("--w-fuel-burn",    type=float, default=None)  # default uses env's W_FUEL_BURN=10.0
+    parser.add_argument("--w-self-burn",    type=float, default=None)  # default uses env's W_SELF_BURN=2.0
+    parser.add_argument("--w-att",          type=float, default=None)  # default uses env's W_ATT=1.0
     parser.add_argument("--hidden-dim",     type=int,   default=256)
     parser.add_argument("--actor-lr",       type=float, default=3e-4)
     parser.add_argument("--critic-lr",      type=float, default=3e-4)

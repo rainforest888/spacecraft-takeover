@@ -1,0 +1,22 @@
+TRAINING: att5_om2_v2  ms=600  sb=2.0  att=5.0  omega=2.0  eps=200
+Ep   10/200  succ=100.0%  elapsed=64s  eta=1217s
+Ep   20/200  succ=95.0%  elapsed=125s  eta=1126s
+Ep   30/200  succ=96.7%  elapsed=192s  eta=1089s
+Ep   40/200  succ=95.0%  elapsed=254s  eta=1018s
+Ep   50/200  succ=94.0%  elapsed=315s  eta=946s
+Ep   60/200  succ=91.7%  elapsed=372s  eta=869s
+Ep   70/200  succ=90.0%  elapsed=432s  eta=802s
+Ep   80/200  succ=88.8%  elapsed=489s  eta=734s
+Ep   90/200  succ=90.0%  elapsed=556s  eta=680s
+Ep  100/200  succ=90.0%  elapsed=620s  eta=620s
+Ep  110/200  succ=90.9%  elapsed=686s  eta=562s
+Ep  120/200  succ=90.0%  elapsed=743s  eta=495s
+Ep  130/200  succ=90.8%  elapsed=810s  eta=436s
+Ep  140/200  succ=90.7%  elapsed=872s  eta=374s
+Ep  150/200  succ=91.3%  elapsed=938s  eta=313s
+Ep  160/200  succ=91.2%  elapsed=1000s  eta=250s
+Ep  170/200  succ=91.8%  elapsed=1063s  eta=188s
+Ep  180/200  succ=92.2%  elapsed=1133s  eta=126s
+Ep  190/200  succ=92.1%  elapsed=1192s  eta=63s
+Ep  200/200  succ=92.5%  elapsed=1257s  eta=0s
+>>> [att5_om2_v2] 92.5% (185/200) in 1257s

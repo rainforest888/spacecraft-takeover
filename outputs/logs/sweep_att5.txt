@@ -1,0 +1,12 @@
+TRAINING: att5  ms=600  sb=2.0  att=5.0  omega=0.0  eps=100
+Ep   10/100  succ=90.0%  elapsed=61s  eta=546s
+Ep   20/100  succ=90.0%  elapsed=125s  eta=499s
+Ep   30/100  succ=90.0%  elapsed=184s  eta=430s
+Ep   40/100  succ=92.5%  elapsed=246s  eta=370s
+Ep   50/100  succ=90.0%  elapsed=314s  eta=314s
+Ep   60/100  succ=90.0%  elapsed=375s  eta=250s
+Ep   70/100  succ=91.4%  elapsed=449s  eta=192s
+Ep   80/100  succ=88.8%  elapsed=504s  eta=126s
+Ep   90/100  succ=88.9%  elapsed=572s  eta=64s
+Ep  100/100  succ=90.0%  elapsed=647s  eta=0s
+>>> [att5] 90.0% (90/100) in 647s

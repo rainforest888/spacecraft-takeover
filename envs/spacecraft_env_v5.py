@@ -60,10 +60,20 @@ class SpacecraftTakeoverEnvV5(gym.Env):
     MASS_STABLE_EPS     = 3.0
     TAU_RESPONSE_FLOOR  = 0.1
 
-    def __init__(self, render_mode=None, max_steps=600):
+    def __init__(self, render_mode=None, max_steps=600,
+                 w_fuel_burn=None, w_self_burn=None, w_att=None, w_omega=None):
         super().__init__()
         self.render_mode = render_mode
         self.max_steps = max_steps
+        # Allow per-instance override of reward weights
+        if w_fuel_burn is not None:
+            self.W_FUEL_BURN = w_fuel_burn
+        if w_self_burn is not None:
+            self.W_SELF_BURN = w_self_burn
+        if w_att is not None:
+            self.W_ATT = w_att
+        # Omega (angular velocity) penalty weight — 0 = disabled
+        self.W_OMEGA = w_omega if w_omega is not None else 0.0
 
         self.model = mujoco.MjModel.from_xml_path(MODEL_PATH)
         self.data  = mujoco.MjData(self.model)
@@ -251,6 +261,13 @@ class SpacecraftTakeoverEnvV5(gym.Env):
         if not self._phase_switched and self._mass_stable_ctr >= self.MASS_STABLE_STEPS:
             self._phase_switched = True
 
+        # Backup phase switch: cumulative torque implies minimum fuel burned
+        # cum_torque (N·m·s) × FUEL_K_MASS = fuel burned (kg)
+        # At cum_torque > 40, ≥120kg burned → close to dry mass for 100-150kg range
+        TORQUE_SWITCH_THRESHOLD = 45.0
+        if not self._phase_switched and self._cumulative_target_torque > TORQUE_SWITCH_THRESHOLD:
+            self._phase_switched = True
+
         # ── reward ─────────────────────────────────────────────────────────
         SCALE = 0.01
         reward = SCALE * (self.W_FUEL_BURN * fuel_burned_kg
@@ -262,6 +279,11 @@ class SpacecraftTakeoverEnvV5(gym.Env):
 
         # Attitude penalty: continuous signal to prevent tumbling
         reward -= SCALE * self.W_ATT * att_err
+
+        # Angular velocity penalty: prevent spinning up (root cause of tumbling)
+        if self.W_OMEGA > 0:
+            omega_norm = float(np.linalg.norm(omega_new))
+            reward -= SCALE * self.W_OMEGA * omega_norm
 
         # Mass estimation auxiliary
         mass_error = (self._est_mass - self._dry_mass)

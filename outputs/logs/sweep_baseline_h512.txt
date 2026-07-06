@@ -1,0 +1,22 @@
+TRAINING: baseline_h512  ms=600  sb=2.0  att=1.0  omega=0.0  eps=200  hdim=512
+Ep   10/200  succ=100.0%  elapsed=113s  eta=2149s
+Ep   20/200  succ=95.0%  elapsed=253s  eta=2274s
+Ep   30/200  succ=93.3%  elapsed=360s  eta=2038s
+Ep   40/200  succ=92.5%  elapsed=499s  eta=1996s
+Ep   50/200  succ=94.0%  elapsed=634s  eta=1903s
+Ep   60/200  succ=93.3%  elapsed=722s  eta=1686s
+Ep   70/200  succ=94.3%  elapsed=812s  eta=1508s
+Ep   80/200  succ=91.2%  elapsed=874s  eta=1311s
+Ep   90/200  succ=91.1%  elapsed=945s  eta=1155s
+Ep  100/200  succ=91.0%  elapsed=1019s  eta=1019s
+Ep  110/200  succ=91.8%  elapsed=1097s  eta=897s
+Ep  120/200  succ=92.5%  elapsed=1178s  eta=785s
+Ep  130/200  succ=93.1%  elapsed=1256s  eta=676s
+Ep  140/200  succ=92.1%  elapsed=1324s  eta=567s
+Ep  150/200  succ=92.7%  elapsed=1403s  eta=468s
+Ep  160/200  succ=93.1%  elapsed=1489s  eta=372s
+Ep  170/200  succ=92.4%  elapsed=1567s  eta=277s
+Ep  180/200  succ=92.2%  elapsed=1648s  eta=183s
+Ep  190/200  succ=92.6%  elapsed=1727s  eta=91s
+Ep  200/200  succ=92.0%  elapsed=1794s  eta=0s
+>>> [baseline_h512] 92.0% (184/200) in 1794s  best_so_far=100.0% @ ep10
